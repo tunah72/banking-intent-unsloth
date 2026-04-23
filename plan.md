@@ -45,7 +45,7 @@ Dưới đây là kế hoạch chi tiết từng bước. Bạn có thể sử d
 - [ ] Chạy thử nghiệm file suy luận ở máy local hoặc Colab để xác minh kết quả và ghi nhận độ chính xác.
 
 ## Giai đoạn 5: Hoàn thiện Báo cáo
-- [ ] Cập nhật `README.md` lần cuối (thêm thông số train, kết quả demo).
+- [x] Cập nhật `README.md` lần cuối (mô tả kiến trúc, luồng chạy 4 bước, thư viện và placeholder video).
 - [ ] Quay Video Demo chứng minh việc tải model và phân loại câu, sau đó upload lên Google Drive.
 - [ ] Gắn link Video vào `README.md`.
 - [ ] Commit và push toàn bộ cấu trúc dự án lên GitHub.

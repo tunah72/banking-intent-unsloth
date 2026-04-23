@@ -1,40 +1,79 @@
-# Fine-Tuning Intent Detection Model with Banking Dataset
+# Banking Intent Classification with Unsloth & QLoRA
 
-Dự án áp dụng kỹ thuật fine-tuning cho bài toán phân loại ý định (intent classification) sử dụng tập dữ liệu `BANKING77` và thư viện `Unsloth`.
+This repository contains the source code for an industry-grade NLP pipeline that fine-tunes a Large Language Model (LLM) to classify customer support messages into 77 distinct banking intents using the **BANKING77** dataset.
 
-## Cấu trúc thư mục
+## 🎯 Project Overview
+This project demonstrates how to perform **Sequence Classification** using **Unsloth** and **HuggingFace Transformers**. We leverage Parameter-Efficient Fine-Tuning (PEFT) via LoRA to achieve state-of-the-art accuracy while training entirely on a free Google Colab T4 GPU (16GB VRAM).
 
-Toàn bộ dự án được tổ chức theo chuẩn bao gồm các thành phần: `scripts`, `configs` và dữ liệu lấy mẫu `sample_data`.
+### Core Technologies:
+- **Base Model:** Llama-3 8B (`unsloth/llama-3-8b-bnb-4bit`)
+- **Optimization:** QLoRA (4-bit quantization) & Unsloth `FastSequenceClassificationModel`
+- **Dataset:** PolyAI/banking77
+- **Evaluation:** Scikit-Learn (Accuracy, Macro F1, Confusion Matrix)
 
-## 1. Cài đặt môi trường
+## 🎥 Video Demonstration
+> **[INSERT GOOGLE DRIVE VIDEO LINK HERE]**
 
-Chạy lệnh sau để cài đặt các thư viện cần thiết:
+*(The video demonstrates loading the trained model, running interactive inference, and calculating the final test set accuracy).*
+
+## 📁 Repository Structure
+```text
+├── configs/              # YAML Configuration files
+│   ├── train.yaml        # LoRA & Trainer hyperparameters
+│   ├── inference.yaml    # Inference settings
+│   └── evaluate.yaml     # Evaluation settings
+├── scripts/              # Python source code
+│   ├── preprocess_data.py # Stratified sampling pipeline
+│   ├── train.py          # HuggingFace Trainer script
+│   ├── inference.py      # Interactive CLI inference
+│   └── evaluate.py       # Classification report & metrics
+├── requirements.txt      # Project dependencies
+├── .gitignore            # Git exclusion rules
+├── train.sh              # Bash script to run training
+├── inference.sh          # Bash script to run inference
+└── evaluate.sh           # Bash script to run evaluation
+```
+
+## 🛠️ Installation
+It is highly recommended to run this project on a machine with a CUDA-enabled GPU (e.g., Google Colab).
 ```bash
+# Clone the repository
+git clone https://github.com/tunah72/banking-intent-unsloth.git
+cd banking-intent-unsloth
+
+# Install dependencies
 pip install -r requirements.txt
 ```
-*(Lưu ý: Quá trình cài đặt `unsloth` có thể yêu cầu phiên bản `torch`, `xformers` và `triton` cụ thể. Khuyến nghị chạy dự án này trên môi trường Google Colab để đạt hiệu suất tốt nhất và ít gặp lỗi tương thích thư viện).*
 
-## 2. Tiền xử lý dữ liệu
+## 🚀 Execution Pipeline
 
-Chạy lệnh sau để tải tập dữ liệu, thực hiện lấy mẫu (Stratified Sampling) và lưu ra thư mục `sample_data/`:
+### Step 1: Data Preprocessing
+Downloads the BANKING77 dataset and applies Stratified Sampling (50 Train / 5 Validation / 10 Test per label) to output clean CSV files.
 ```bash
 python scripts/preprocess_data.py
 ```
 
-## 3. Huấn luyện mô hình (Training)
-
-Chạy lệnh bash script sau để huấn luyện mô hình. Mô hình sẽ đọc cấu hình từ `configs/train.yaml`:
+### Step 2: Model Fine-tuning (QLoRA)
+Runs the HuggingFace Trainer using the `configs/train.yaml` configuration. Automatically saves the best checkpoint based on Validation Loss.
 ```bash
 bash train.sh
 ```
 
-## 4. Suy luận (Inference)
-
-Chạy lệnh bash script sau để nạp checkpoint và đưa ra dự đoán ý định (Intent) từ một câu do người dùng nhập vào. Mô hình đọc cấu hình từ `configs/inference.yaml`:
+### Step 3: Interactive Inference
+Launches a CLI chatbot that allows you to type custom banking queries and instantly receive the predicted intent.
 ```bash
 bash inference.sh
 ```
 
-## 5. Video Báo cáo (Demo)
+### Step 4: Academic Evaluation
+Evaluates the fine-tuned model against the 770 test samples. Calculates Accuracy, Precision, Recall, Macro F1-Score, and generates a Confusion Matrix.
+```bash
+bash evaluate.sh
+```
+*Outputs will be saved in the `results/` directory.*
 
-* [Link Video Demo trên Google Drive](#) (Sẽ cập nhật sau khi quay)
+## 📊 Expected Results (Placeholder)
+*(After training on Colab, update this section with your actual metrics)*
+- **Validation Loss:** `[Value]`
+- **Test Accuracy:** `[Value]%`
+- **Macro F1-Score:** `[Value]`
