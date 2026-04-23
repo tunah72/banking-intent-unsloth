@@ -1,0 +1,10 @@
+unsloth
+torch
+transformers
+datasets
+pandas
+scikit-learn
+pyyaml
+matplotlib
+seaborn
+tqdm

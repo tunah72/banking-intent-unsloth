@@ -1,0 +1,82 @@
+import os
+import json
+import pandas as pd
+from datasets import load_dataset
+
+def main():
+    print("Loading BANKING77 dataset from HuggingFace...")
+    # Tải dataset banking77 từ HuggingFace
+    dataset = load_dataset("PolyAI/banking77")
+    
+    # Chuyển đổi sang Pandas DataFrame để dễ xử lý
+    df_train = dataset['train'].to_pandas()
+    df_test = dataset['test'].to_pandas()
+    
+    # Trích xuất danh sách tên các nhãn (intent)
+    label_feature = dataset['train'].features['label']
+    label_names = label_feature.names
+    
+    # Lưu file ánh xạ nhãn để dùng cho lúc Inference
+    label_mapping = {i: name for i, name in enumerate(label_names)}
+    
+    os.makedirs("sample_data", exist_ok=True)
+    with open("sample_data/label_mapping.json", "w", encoding="utf-8") as f:
+        json.dump(label_mapping, f, indent=4)
+    print("Saved label mapping to sample_data/label_mapping.json")
+    
+    # Gắn thêm cột tên nhãn bằng text để dễ đọc file CSV
+    df_train['label_name'] = df_train['label'].apply(lambda x: label_names[x])
+    df_test['label_name'] = df_test['label'].apply(lambda x: label_names[x])
+    
+    # ---------------------------------------------------------
+    # STRATIFIED SAMPLING: Chiến lược 50 Train / 5 Val / 10 Test
+    # ---------------------------------------------------------
+    print("Performing Stratified Sampling...")
+    n_train_samples = 50
+    n_val_samples = 5
+    n_test_samples = 10
+    
+    sampled_train_list = []
+    sampled_val_list = []
+    
+    # Tách Train và Validation từ tập df_train gốc
+    for label_id in df_train['label'].unique():
+        group = df_train[df_train['label'] == label_id]
+        
+        # Lấy tổng cộng 55 mẫu (50 cho train, 5 cho val)
+        if len(group) < (n_train_samples + n_val_samples):
+            samples = group.sample(frac=1, random_state=42)
+        else:
+            samples = group.sample(n=n_train_samples + n_val_samples, random_state=42)
+            
+        train_part = samples.iloc[:n_train_samples]
+        val_part = samples.iloc[n_train_samples:n_train_samples+n_val_samples]
+        
+        sampled_train_list.append(train_part)
+        sampled_val_list.append(val_part)
+        
+    sampled_train = pd.concat(sampled_train_list)
+    sampled_val = pd.concat(sampled_val_list)
+    
+    # Tách Test từ tập df_test gốc
+    sampled_test = df_test.groupby('label', group_keys=False).apply(
+        lambda x: x.sample(n=min(len(x), n_test_samples), random_state=42)
+    )
+    
+    # Shuffle ngẫu nhiên lại toàn bộ DataFrame
+    sampled_train = sampled_train.sample(frac=1, random_state=42).reset_index(drop=True)
+    sampled_val = sampled_val.sample(frac=1, random_state=42).reset_index(drop=True)
+    sampled_test = sampled_test.sample(frac=1, random_state=42).reset_index(drop=True)
+    
+    # Lưu ra CSV
+    sampled_train.to_csv("sample_data/train.csv", index=False)
+    sampled_val.to_csv("sample_data/val.csv", index=False)
+    sampled_test.to_csv("sample_data/test.csv", index=False)
+    
+    print(f"Saved sampled train data ({len(sampled_train)} rows) to sample_data/train.csv")
+    print(f"Saved sampled validation data ({len(sampled_val)} rows) to sample_data/val.csv")
+    print(f"Saved sampled test data ({len(sampled_test)} rows) to sample_data/test.csv")
+    print("Data Preprocessing completed successfully!")
+
+if __name__ == "__main__":
+    main()

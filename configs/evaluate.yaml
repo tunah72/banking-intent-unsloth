@@ -1,0 +1,5 @@
+model_checkpoint: "checkpoints/final_best_model"
+max_seq_length: 128
+label_mapping_path: "sample_data/label_mapping.json"
+test_data_path: "sample_data/test.csv"
+output_dir: "results"
