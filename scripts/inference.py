@@ -63,7 +63,7 @@ if __name__ == '__main__':
     classifier = IntentClassification(config_file)
     
     # ---------------------------------------------------------
-    # BƯỚC 1: DEMO TƯƠNG TÁC (GIAO LƯU NHẬP TỪ BÀN PHÍM)
+    # DEMO TƯƠNG TÁC (GIAO LƯU NHẬP TỪ BÀN PHÍM)
     # ---------------------------------------------------------
     print("\n" + "="*60)
     print(" BƯỚC 1: GIAO LƯU TRỰC TIẾP (INTERACTIVE DEMO)")
@@ -81,30 +81,5 @@ if __name__ == '__main__':
         predicted_intent = classifier(user_input)
         print(f"[Hệ thống] Dự đoán Intent: >> {predicted_intent} <<")
         
-    # ---------------------------------------------------------
-    # BƯỚC 2: CHẤM ĐIỂM ACCURACY TRÊN TẬP TEST
-    # ---------------------------------------------------------
-    print("\n" + "="*60)
-    print(" BƯỚC 2: CHẤM ĐIỂM TRÊN TẬP TEST (FINAL ACCURACY)")
-    print("="*60)
-    
-    test_path = classifier.config.get('test_data_path', 'sample_data/test.csv')
-    if os.path.exists(test_path):
-        print(f"Đang đọc dữ liệu kiểm thử từ {test_path}...")
-        df_test = pd.read_csv(test_path)
-        
-        y_true_names = df_test['label_name'].tolist()
-        y_pred_names = []
-        
-        print(f"Đang tiến hành dự đoán {len(df_test)} mẫu. Vui lòng chờ...")
-        for idx, row in df_test.iterrows():
-            pred_name = classifier(row['text'])
-            y_pred_names.append(pred_name)
-            
-        accuracy = accuracy_score(y_true_names, y_pred_names)
-        
-        print("\n" + "*"*40)
-        print(f" ĐỘ CHÍNH XÁC (TEST ACCURACY): {accuracy * 100:.2f}%")
-        print("*"*40 + "\n")
-    else:
-        print(f"Không tìm thấy file {test_path} để đánh giá.")
+    print("\n[Hệ thống] Đã thoát chế độ Giao lưu.")
+    print("Để xem báo cáo độ chính xác trên toàn bộ tập Test, vui lòng chạy: bash evaluate.sh\n")
