@@ -2,8 +2,6 @@ import os
 import yaml
 import json
 import torch
-import pandas as pd
-from sklearn.metrics import accuracy_score
 from unsloth import FastSequenceClassificationModel
 
 class IntentClassification:
@@ -42,7 +40,7 @@ class IntentClassification:
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         
         # Bỏ qua lưu trữ đạo hàm để tiết kiệm RAM và tăng tốc độ
-        with torch.no_grad(): # Hoặc torch.inference_mode()
+        with torch.no_grad():
             outputs = self.model(**inputs)
             
         logits = outputs.logits
@@ -53,9 +51,13 @@ class IntentClassification:
 if __name__ == '__main__':
     config_file = "configs/inference.yaml"
     
-    # Cảnh báo nếu bạn lỡ chạy file này trước khi Train
-    if not os.path.exists("checkpoints/final_best_model"):
-        print("\n[!] CẢNH BÁO: Chưa tìm thấy checkpoint mô hình đã huấn luyện!")
+    # Đọc config trước để lấy đường dẫn checkpoint
+    with open(config_file, 'r', encoding='utf-8') as f:
+        _config = yaml.safe_load(f)
+    
+    # Cảnh báo nếu chưa có checkpoint
+    if not os.path.exists(_config['model_checkpoint']):
+        print(f"\n[!] CẢNH BÁO: Chưa tìm thấy checkpoint tại '{_config['model_checkpoint']}'!")
         print("Vui lòng chạy quá trình Train (bash train.sh) trên Colab trước khi chạy Inference.\n")
         exit(1)
         
@@ -66,20 +68,20 @@ if __name__ == '__main__':
     # DEMO TƯƠNG TÁC (GIAO LƯU NHẬP TỪ BÀN PHÍM)
     # ---------------------------------------------------------
     print("\n" + "="*60)
-    print(" BƯỚC 1: GIAO LƯU TRỰC TIẾP (INTERACTIVE DEMO)")
+    print(" INTERACTIVE DEMO - BANKING INTENT CLASSIFICATION")
     print("="*60)
     print("Hãy nhập một câu hỏi/phàn nàn bằng tiếng Anh.")
-    print("(Gõ 'quit', 'exit' hoặc 'q' để chuyển sang Bước 2).")
+    print("(Gõ 'quit', 'exit' hoặc 'q' để thoát).\n")
     
     while True:
-        user_input = input("\n[Khách hàng]: ")
+        user_input = input("[Khách hàng]: ")
         if user_input.lower() in ['quit', 'exit', 'q']:
             break
         if user_input.strip() == "":
             continue
             
         predicted_intent = classifier(user_input)
-        print(f"[Hệ thống] Dự đoán Intent: >> {predicted_intent} <<")
+        print(f"[Hệ thống] Dự đoán Intent: >> {predicted_intent} <<\n")
         
-    print("\n[Hệ thống] Đã thoát chế độ Giao lưu.")
+    print("[Hệ thống] Đã thoát chế độ Giao lưu.")
     print("Để xem báo cáo độ chính xác trên toàn bộ tập Test, vui lòng chạy: bash evaluate.sh\n")
