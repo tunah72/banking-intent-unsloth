@@ -5,7 +5,7 @@ from datasets import load_dataset
 
 def main():
     print("Loading BANKING77 dataset from HuggingFace...")
-    dataset = load_dataset("PolyAI/banking77")
+    dataset = load_dataset("PolyAI/banking77", trust_remote_code=True)
     
     # Convert to Pandas DataFrame for easier manipulation
     df_train = dataset['train'].to_pandas()
