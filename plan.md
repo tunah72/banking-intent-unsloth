@@ -27,7 +27,8 @@ Dưới đây là kế hoạch chi tiết từng bước. Bạn có thể sử d
   - Cấu hình Trainer và chạy huấn luyện. (Đã tích hợp Resume Checkpoint và hàm `compute_metrics` để hiển thị Accuracy).
   - Lưu Checkpoint sau khi hoàn tất.
 - [x] Viết nội dung chạy lệnh cho file `train.sh`.
-- [ ] **Kết nối Colab MCP:** Đưa mã nguồn lên Colab, chạy lệnh `bash train.sh` trên GPU và tải Checkpoint về máy local.
+- [x] Viết notebook `notebooks/kaggle_pipeline.ipynb` để thực thi toàn bộ pipeline (preprocess, train, evaluate, inference, save output) trên Kaggle/Colab.
+- [ ] **Thực thi trên Cloud:** Upload notebook lên Kaggle/Colab, chạy trên GPU và tải Checkpoint về máy local.
 
 ## Giai đoạn 4: Suy luận (Inference Implementation)
 - [x] Viết cấu hình `configs/inference.yaml` chứa: `model_checkpoint`, `max_seq_length`, `label_mapping_path` và `test_data_path`.

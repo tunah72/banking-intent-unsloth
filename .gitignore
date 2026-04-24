@@ -23,8 +23,9 @@ wheels/
 venv/
 .env
 
-# Project Data (Sẽ tự sinh ra khi chạy code, không nên push lên Git để tránh nặng repo)
-sample_data/
+# Project Data: chỉ ignore file lớn, giữ lại CSV và label mapping để submit
+sample_data/*.pkl
+sample_data/*.bin
 
 # Model Checkpoints (Các file trọng số mô hình rất nặng, tuyệt đối không push)
 checkpoints/

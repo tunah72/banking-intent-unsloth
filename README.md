@@ -59,8 +59,8 @@ Runs the HuggingFace Trainer using the `configs/train.yaml` configuration. Autom
 bash train.sh
 ```
 
-### Step 3: Interactive Inference
-Launches a CLI chatbot that allows you to type custom banking queries and instantly receive the predicted intent.
+### Step 3: Inference Demo
+Runs inference on a predefined set of sample banking queries and prints the predicted intent for each.
 ```bash
 bash inference.sh
 ```

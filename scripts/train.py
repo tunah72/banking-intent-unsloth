@@ -83,6 +83,7 @@ def main(config_path):
         lr_scheduler_type=t_args['lr_scheduler_type'],
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
+        seed=t_args['seed'],
     )
     
     trainer = Trainer(

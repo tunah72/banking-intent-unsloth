@@ -1,7 +1,7 @@
 unsloth
 torch
 transformers
-datasets
+datasets==2.21.0
 pandas
 scikit-learn
 pyyaml

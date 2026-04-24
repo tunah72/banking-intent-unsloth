@@ -23,6 +23,10 @@ def main():
         json.dump(label_mapping, f, indent=4)
     print("Saved label mapping to sample_data/label_mapping.json")
     
+    # Text normalization: strip whitespace and lowercase
+    df_train['text'] = df_train['text'].str.strip().str.lower()
+    df_test['text'] = df_test['text'].str.strip().str.lower()
+
     # Add human-readable label name column
     df_train['label_name'] = df_train['label'].apply(lambda x: label_names[x])
     df_test['label_name'] = df_test['label'].apply(lambda x: label_names[x])
@@ -58,9 +62,11 @@ def main():
     sampled_val = pd.concat(sampled_val_list)
     
     # Sample Test from the original test set
-    sampled_test = df_test.groupby('label', group_keys=False).apply(
-        lambda x: x.sample(n=min(len(x), n_test_samples), random_state=42)
-    )
+    sampled_test_list = []
+    for label_id in df_test['label'].unique():
+        group = df_test[df_test['label'] == label_id]
+        sampled_test_list.append(group.sample(n=min(len(group), n_test_samples), random_state=42))
+    sampled_test = pd.concat(sampled_test_list)
     
     # Shuffle all DataFrames
     sampled_train = sampled_train.sample(frac=1, random_state=42).reset_index(drop=True)
