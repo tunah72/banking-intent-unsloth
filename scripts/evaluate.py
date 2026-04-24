@@ -21,11 +21,11 @@ def main(config_path):
         label2id = {v: int(k) for k, v in mapping.items()}
         
     if not os.path.exists(config['model_checkpoint']):
-        print(f"\n[LỖI] Không tìm thấy mô hình tại {config['model_checkpoint']}")
-        print("Vui lòng chạy quá trình Train trên Colab trước!\n")
+        print(f"\n[ERROR] Model checkpoint not found at {config['model_checkpoint']}")
+        print("Please run training first (bash train.sh).\n")
         exit(1)
         
-    print(f"Loading model and tokenizer...")
+    print("Loading model and tokenizer...")
     model, tokenizer = FastSequenceClassificationModel.from_pretrained(
         model_name = config['model_checkpoint'],
         max_seq_length = config['max_seq_length'],
@@ -42,8 +42,8 @@ def main(config_path):
     y_true_names = df_test['label_name'].tolist()
     y_pred_names = []
     
+    # Batch inference for GPU efficiency
     print("Running batch inference on test dataset...")
-    # Dự đoán theo batch (lô) để tận dụng GPU và tăng tốc độ thay vì duyệt từng dòng
     batch_size = 16
     for i in tqdm(range(0, len(df_test), batch_size)):
         batch_texts = df_test['text'].iloc[i:i+batch_size].tolist()
@@ -58,56 +58,56 @@ def main(config_path):
             y_pred_names.append(id2label[class_id])
             
     # ---------------------------------------------------------
-    # Lưu toàn bộ lịch sử dự đoán ra file CSV
+    # Save prediction history to CSV
     # ---------------------------------------------------------
     df_test['predicted_label_name'] = y_pred_names
     pred_csv_path = os.path.join(config['output_dir'], "test_predictions.csv")
     df_test.to_csv(pred_csv_path, index=False)
-    print(f"\n[1] Đã lưu file CSV kết quả dự đoán chi tiết tại: {pred_csv_path}")
+    print(f"\n[1] Saved detailed predictions to: {pred_csv_path}")
     
-    # Tính toán các chỉ số
+    # Compute metrics
     accuracy = accuracy_score(y_true_names, y_pred_names)
     target_names = [id2label[i] for i in range(len(id2label))]
     report_dict = classification_report(y_true_names, y_pred_names, target_names=target_names, output_dict=True, zero_division=0)
     report_text = classification_report(y_true_names, y_pred_names, target_names=target_names, zero_division=0)
     
     # ---------------------------------------------------------
-    # Lưu Classification Report ra Text
+    # Save Classification Report as text
     # ---------------------------------------------------------
     report_txt_path = os.path.join(config['output_dir'], "classification_report.txt")
     with open(report_txt_path, "w", encoding="utf-8") as f:
         f.write(report_text)
-    print(f"[2] Đã xuất Báo cáo học thuật (TXT) tại: {report_txt_path}")
+    print(f"[2] Saved classification report to: {report_txt_path}")
     
     # ---------------------------------------------------------
-    # Lưu Metrics JSON
+    # Save metrics as JSON
     # ---------------------------------------------------------
     metrics_json_path = os.path.join(config['output_dir'], "metrics.json")
     with open(metrics_json_path, "w", encoding="utf-8") as f:
         json.dump(report_dict, f, indent=4)
-    print(f"[3] Đã xuất số liệu nguyên bản (JSON) tại: {metrics_json_path}")
+    print(f"[3] Saved metrics JSON to: {metrics_json_path}")
     
     # ---------------------------------------------------------
-    # Vẽ Confusion Matrix bằng Seaborn
+    # Plot Confusion Matrix
     # ---------------------------------------------------------
-    print("Đang vẽ biểu đồ Confusion Matrix...")
+    print("Generating Confusion Matrix...")
     cm = confusion_matrix(y_true_names, y_pred_names, labels=target_names)
     plt.figure(figsize=(24, 20))
     sns.heatmap(cm, annot=False, cmap="Blues", xticklabels=target_names, yticklabels=target_names)
     plt.title("Banking77 Intent Classification - Confusion Matrix", fontsize=20)
-    plt.ylabel('True Label (Thực tế)', fontsize=14)
-    plt.xlabel('Predicted Label (Dự đoán)', fontsize=14)
+    plt.ylabel('True Label', fontsize=14)
+    plt.xlabel('Predicted Label', fontsize=14)
     plt.xticks(rotation=90, fontsize=8)
     plt.yticks(rotation=0, fontsize=8)
     plt.tight_layout()
     cm_path = os.path.join(config['output_dir'], "confusion_matrix.png")
     plt.savefig(cm_path, dpi=300)
-    print(f"[4] Đã lưu biểu đồ Ma trận nhầm lẫn tại: {cm_path}")
+    print(f"[4] Saved confusion matrix to: {cm_path}")
     
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(" EVALUATION COMPLETED SUCCESSFULLY")
     print(f" Overall Accuracy: {accuracy*100:.2f}%")
-    print("="*50)
+    print("=" * 50)
 
 if __name__ == "__main__":
     import argparse

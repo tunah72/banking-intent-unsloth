@@ -29,7 +29,7 @@ def prepare_dataset(csv_path, tokenizer, max_length):
         return tokenizer(examples['text'], truncation=True, max_length=max_length, padding="max_length")
     
     tokenized_dataset = dataset.map(tokenize_function, batched=True)
-    # Đổi tên cột label thành labels để Trainer tự động nhận diện tính Loss
+    # Rename "label" to "labels" as required by HuggingFace Trainer
     tokenized_dataset = tokenized_dataset.rename_column("label", "labels")
     return tokenized_dataset
 
@@ -94,21 +94,20 @@ def main(config_path):
         compute_metrics=compute_metrics,
     )
     
-    # Logic to resume from checkpoint if it exists
+    # Resume from checkpoint if one exists (handles disconnection)
     output_dir = t_args['output_dir']
     resume_from_checkpoint = False
     if os.path.exists(output_dir):
         checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
         if len(checkpoints) > 0:
             resume_from_checkpoint = True
-            print(f"Found existing checkpoints in {output_dir}. Resuming training to prevent data loss...")
+            print(f"Found existing checkpoints in {output_dir}. Resuming training...")
     
     print("Starting training...")
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     
     print("Training complete! Saving final best model...")
     # The best model is already loaded because of load_best_model_at_end=True
-    # We save it explicitly to a final directory
     final_save_dir = os.path.join(output_dir, "final_best_model")
     model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)

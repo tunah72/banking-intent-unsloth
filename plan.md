@@ -34,7 +34,7 @@ Dưới đây là kế hoạch chi tiết từng bước. Bạn có thể sử d
 - [x] Viết script `scripts/inference.py`:
   - Khởi tạo class OOP `IntentClassification` đúng chuẩn với 2 hàm `__init__` (nhận tham số file config) và `__call__` (nhận tham số text).
   - **Lưu ý tối ưu:** Đã nạp hàm `FastSequenceClassificationModel.for_inference(model)` giúp tăng x2 tốc độ và đặt lệnh dự đoán bên trong `torch.no_grad()` để tránh lỗi tràn RAM (OOM).
-  - **Kịch bản Demo (Dùng cho Video):** Viết khối lệnh test tự động chạy Bước 1 (Giao lưu tương tác) bằng lệnh `input()` từ Terminal.
+  - **Kịch bản Demo:** Sử dụng danh sách câu test cố định (static input) thay vì `input()` để tương thích với Kaggle/Colab.
 - [x] Viết nội dung chạy lệnh cho file `inference.sh`.
 - [x] **Xây dựng luồng Đánh giá Học thuật (Evaluation Phase)** để làm báo cáo:
   - Viết file `configs/evaluate.yaml` và `scripts/evaluate.py`.
