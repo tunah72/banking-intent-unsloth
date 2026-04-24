@@ -1,5 +1,5 @@
 torch
-transformers
+transformers>=4.46.0
 datasets==2.21.0
 peft
 bitsandbytes
