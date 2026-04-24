@@ -5,63 +5,92 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset
 from sklearn.metrics import accuracy_score
-from unsloth import FastSequenceClassificationModel
-from transformers import TrainingArguments, Trainer
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    TrainingArguments,
+    Trainer,
+)
+from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+
 
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
     return {"accuracy": accuracy_score(labels, predictions)}
 
+
 def load_config(config_path):
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
+
 def prepare_dataset(csv_path, tokenizer, max_length):
     df = pd.read_csv(csv_path)
-    # Ensure text is string and label is int
     df['text'] = df['text'].astype(str)
     df['label'] = df['label'].astype(int)
-    
     dataset = Dataset.from_pandas(df)
-    
+
     def tokenize_function(examples):
-        return tokenizer(examples['text'], truncation=True, max_length=max_length, padding="max_length")
-    
+        return tokenizer(
+            examples['text'],
+            truncation=True,
+            max_length=max_length,
+            padding="max_length",
+        )
+
     tokenized_dataset = dataset.map(tokenize_function, batched=True)
-    # Rename "label" to "labels" as required by HuggingFace Trainer
     tokenized_dataset = tokenized_dataset.rename_column("label", "labels")
     return tokenized_dataset
 
+
 def main(config_path):
     config = load_config(config_path)
-    
+    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
+    # ── Tokenizer ──────────────────────────────────────────────────────────
+    print(f"Loading tokenizer: {config['model_name']}...")
+    tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # ── Model (4-bit QLoRA) ─────────────────────────────────────────────────
     print(f"Loading model: {config['model_name']}...")
-    model, tokenizer = FastSequenceClassificationModel.from_pretrained(
-        model_name = config['model_name'],
-        max_seq_length = config['max_seq_length'],
-        dtype = None, # Auto detect
-        load_in_4bit = True,
-        num_labels = config['num_labels'],
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=compute_dtype,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
     )
-    
+    model = AutoModelForSequenceClassification.from_pretrained(
+        config['model_name'],
+        num_labels=config['num_labels'],
+        quantization_config=bnb_config,
+        device_map="auto",
+    )
+    model.config.pad_token_id = tokenizer.pad_token_id
+
+    # ── LoRA ────────────────────────────────────────────────────────────────
     print("Applying LoRA adapters...")
-    model = FastSequenceClassificationModel.get_peft_model(
-        model,
-        r = config['lora_r'],
-        target_modules = config['target_modules'],
-        lora_alpha = config['lora_alpha'],
-        lora_dropout = config['lora_dropout'],
-        bias = "none",
-        use_gradient_checkpointing = "unsloth",
-        random_state = 3407,
+    model = prepare_model_for_kbit_training(model)
+    lora_config = LoraConfig(
+        r=config['lora_r'],
+        lora_alpha=config['lora_alpha'],
+        target_modules=config['target_modules'],
+        lora_dropout=config['lora_dropout'],
+        bias="none",
+        task_type=TaskType.SEQ_CLS,
     )
-    
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
+
+    # ── Datasets ────────────────────────────────────────────────────────────
     print("Loading and tokenizing datasets...")
     train_dataset = prepare_dataset("sample_data/train.csv", tokenizer, config['max_seq_length'])
-    val_dataset = prepare_dataset("sample_data/val.csv", tokenizer, config['max_seq_length'])
-    
-    # Configure Training Arguments
+    val_dataset   = prepare_dataset("sample_data/val.csv",   tokenizer, config['max_seq_length'])
+
+    # ── Training Arguments ──────────────────────────────────────────────────
     t_args = config['training_args']
     training_args = TrainingArguments(
         output_dir=t_args['output_dir'],
@@ -81,11 +110,12 @@ def main(config_path):
         optim=t_args['optim'],
         weight_decay=t_args['weight_decay'],
         lr_scheduler_type=t_args['lr_scheduler_type'],
+        warmup_ratio=t_args['warmup_ratio'],
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
         seed=t_args['seed'],
     )
-    
+
     trainer = Trainer(
         model=model,
         tokenizer=tokenizer,
@@ -94,25 +124,26 @@ def main(config_path):
         eval_dataset=val_dataset,
         compute_metrics=compute_metrics,
     )
-    
-    # Resume from checkpoint if one exists (handles disconnection)
+
+    # Resume from checkpoint if one exists (handles Kaggle/Colab disconnection)
     output_dir = t_args['output_dir']
     resume_from_checkpoint = False
     if os.path.exists(output_dir):
         checkpoints = [d for d in os.listdir(output_dir) if d.startswith("checkpoint-")]
-        if len(checkpoints) > 0:
+        if checkpoints:
             resume_from_checkpoint = True
             print(f"Found existing checkpoints in {output_dir}. Resuming training...")
-    
+
     print("Starting training...")
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
-    
+
     print("Training complete! Saving final best model...")
-    # The best model is already loaded because of load_best_model_at_end=True
     final_save_dir = os.path.join(output_dir, "final_best_model")
-    model.save_pretrained(final_save_dir)
+    model.save_pretrained(final_save_dir)         # LoRA adapters + adapter_config.json
+    model.config.save_pretrained(final_save_dir)  # config.json with num_labels
     tokenizer.save_pretrained(final_save_dir)
-    print(f"Best model successfully saved to {final_save_dir}")
+    print(f"Best model saved to {final_save_dir}")
+
 
 if __name__ == "__main__":
     import argparse

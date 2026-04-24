@@ -1,7 +1,9 @@
-unsloth
 torch
 transformers
 datasets==2.21.0
+peft
+bitsandbytes
+accelerate
 pandas
 scikit-learn
 pyyaml
