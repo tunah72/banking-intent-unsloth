@@ -10,6 +10,7 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     Trainer,
+    BitsAndBytesConfig,
 )
 from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
 
@@ -59,13 +60,21 @@ def main(config_path):
         tokenizer.pad_token = tokenizer.eos_token
 
     # ── Model (4-bit QLoRA) ───────────────────────────────────────────────
-    # Unsloth pre-quantized model already has 4-bit weights, no BitsAndBytesConfig needed
     print(f"Loading model: {config['model_name']}...")
+    
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=compute_dtype,
+        bnb_4bit_use_double_quant=True,
+    )
+    
     model = AutoModelForSequenceClassification.from_pretrained(
         config['model_name'],
         num_labels=config['num_labels'],
         device_map="auto",
         torch_dtype=compute_dtype,
+        quantization_config=quantization_config,
     )
     model.config.pad_token_id = tokenizer.pad_token_id
 
@@ -113,6 +122,7 @@ def main(config_path):
         bf16=torch.cuda.is_bf16_supported(),
         seed=t_args['seed'],
         report_to=t_args.get('report_to', 'none'),
+        gradient_checkpointing_kwargs={"use_reentrant": False},
     )
 
     trainer = Trainer(
