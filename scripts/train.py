@@ -72,7 +72,7 @@ def main(config_path):
     model = AutoModelForSequenceClassification.from_pretrained(
         config['model_name'],
         num_labels=config['num_labels'],
-        device_map="auto",
+        device_map={"": 0},
         torch_dtype=compute_dtype,
         quantization_config=quantization_config,
     )
@@ -90,7 +90,11 @@ def main(config_path):
 
     # ── LoRA ────────────────────────────────────────────────────────────────
     print("Applying LoRA adapters...")
-    model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+    model = prepare_model_for_kbit_training(
+        model,
+        use_gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+    )
     lora_config = LoraConfig(
         r=config['lora_r'],
         lora_alpha=config['lora_alpha'],
