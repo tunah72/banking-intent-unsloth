@@ -59,20 +59,14 @@ def main(config_path):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # ── Model (4-bit QLoRA via bitsandbytes) ────────────────────────────────
-    # Uses Unsloth's pre-quantized weights (fast download, no OOM on T4)
+    # ── Model (4-bit QLoRA) ───────────────────────────────────────────────
+    # Unsloth pre-quantized model already has 4-bit weights, no BitsAndBytesConfig needed
     print(f"Loading model: {config['model_name']}...")
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=compute_dtype,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-    )
     model = AutoModelForSequenceClassification.from_pretrained(
         config['model_name'],
         num_labels=config['num_labels'],
-        quantization_config=bnb_config,
         device_map="auto",
+        torch_dtype=compute_dtype,
     )
     model.config.pad_token_id = tokenizer.pad_token_id
 
