@@ -26,7 +26,7 @@ training_args:
   save_steps: 50
   logging_steps: 10
   save_total_limit: 2
-  load_best_model_at_end: true
+  load_best_model_at_end: false  # 4-bit PEFT models cannot be reloaded via load_state_dict
   metric_for_best_model: "eval_accuracy"
   greater_is_better: true
   optim: "adamw_8bit"
@@ -34,3 +34,4 @@ training_args:
   lr_scheduler_type: "linear"
   warmup_ratio: 0.05
   seed: 42
+  report_to: "none"

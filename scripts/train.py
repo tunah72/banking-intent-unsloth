@@ -42,6 +42,10 @@ def prepare_dataset(csv_path, tokenizer, max_length):
 
     tokenized_dataset = dataset.map(tokenize_function, batched=True)
     tokenized_dataset = tokenized_dataset.rename_column("label", "labels")
+    # Drop all non-model columns so Trainer doesn't pass them to model(**batch)
+    keep = [c for c in ["input_ids", "attention_mask", "token_type_ids", "labels"]
+            if c in tokenized_dataset.column_names]
+    tokenized_dataset = tokenized_dataset.select_columns(keep)
     return tokenized_dataset
 
 
@@ -115,6 +119,7 @@ def main(config_path):
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
         seed=t_args['seed'],
+        report_to=t_args.get('report_to', 'none'),
     )
 
     trainer = Trainer(
@@ -138,12 +143,20 @@ def main(config_path):
     print("Starting training...")
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
-    print("Training complete! Saving final best model...")
+    # Log best checkpoint info (load_best_model_at_end=False, so we save the final epoch)
+    best_ckpt = trainer.state.best_model_checkpoint
+    best_metric = trainer.state.best_metric
+    if best_ckpt:
+        print(f"\nBest checkpoint during training : {best_ckpt}")
+        print(f"Best eval_accuracy              : {best_metric:.4f}")
+        print("(Saving final-epoch weights below; use best checkpoint dir for highest accuracy)")
+
+    print("\nSaving final model...")
     final_save_dir = os.path.join(output_dir, "final_best_model")
     model.save_pretrained(final_save_dir)
     model.config.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
-    print(f"Best model saved to {final_save_dir}")
+    print(f"Model saved to {final_save_dir}")
 
 
 if __name__ == "__main__":
