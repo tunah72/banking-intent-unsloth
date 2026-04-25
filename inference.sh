@@ -1,5 +1,5 @@
 #!/bin/bash
 echo "=============================================="
-echo "Khởi động mô-đun Suy luận (Inference)"
+echo "Inference"
 echo "=============================================="
 python scripts/inference.py

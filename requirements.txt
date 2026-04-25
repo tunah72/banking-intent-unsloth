@@ -1,15 +1,26 @@
-unsloth
-torch
-transformers>=4.46.0
+# Core ML
+torch>=2.1.0
+transformers>=4.46.0,<5.0.0
 datasets==2.21.0
-peft
-bitsandbytes
-accelerate
-pandas
-scikit-learn
-pyyaml
-matplotlib
-seaborn
-tqdm
+peft>=0.12.0
+bitsandbytes>=0.43.0
+accelerate>=0.26.0
+
+# Unsloth — install AFTER torch, requires matching CUDA version
+# See: https://docs.unsloth.ai/get-started/installing-+-updating
+unsloth
+
+# Data processing
+pandas>=2.0.0
+scikit-learn>=1.3.0
+numpy>=1.24.0
+
+# Config & utilities
+pyyaml>=6.0
+tqdm>=4.65.0
 sentencepiece
 protobuf
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0

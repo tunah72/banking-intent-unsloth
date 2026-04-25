@@ -12,6 +12,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     AutoConfig,
+    BitsAndBytesConfig,
 )
 
 
@@ -46,13 +47,19 @@ def main(config_path):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Pre-quantized model: no BitsAndBytesConfig needed
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=compute_dtype,
+        bnb_4bit_use_double_quant=True,
+    )
     print(f"Loading base model: {base_model_name}...")
     base_model = AutoModelForSequenceClassification.from_pretrained(
         base_model_name,
         num_labels=num_labels,
         device_map="auto",
         torch_dtype=compute_dtype,
+        quantization_config=quantization_config,
     )
     base_model.config.pad_token_id = tokenizer.pad_token_id
 

@@ -35,3 +35,6 @@ results/test_predictions.csv
 
 # Jupyter Notebook (Dành cho Colab)
 .ipynb_checkpoints/
+
+# Temporary test files
+test_bnb.py

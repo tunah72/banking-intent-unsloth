@@ -13,6 +13,8 @@ target_modules:
   - "gate_proj"
   - "up_proj"
   - "down_proj"
+modules_to_save:
+  - "score"
 
 training_args:
   per_device_train_batch_size: 2

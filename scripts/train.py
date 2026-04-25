@@ -67,7 +67,6 @@ def main(config_path):
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=compute_dtype,
         bnb_4bit_use_double_quant=True,
-        llm_int8_skip_modules=["score"],
     )
     
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -79,6 +78,16 @@ def main(config_path):
     )
     model.config.pad_token_id = tokenizer.pad_token_id
 
+    # ── FIX FOR CLASSIFICATION HEAD QUANTIZATION ────────────────────────────
+    # Prevent bitsandbytes from crashing on the randomly initialized score head
+    import torch.nn as nn
+    if hasattr(model, "score"):
+        in_features = model.score.in_features
+        out_features = model.score.out_features
+        new_score = nn.Linear(in_features, out_features, bias=False)
+        new_score.to(model.device).to(compute_dtype)
+        model.score = new_score
+
     # ── LoRA ────────────────────────────────────────────────────────────────
     print("Applying LoRA adapters...")
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
@@ -89,6 +98,7 @@ def main(config_path):
         lora_dropout=config['lora_dropout'],
         bias="none",
         task_type=TaskType.SEQ_CLS,
+        modules_to_save=config.get('modules_to_save', ["score"]),
     )
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
