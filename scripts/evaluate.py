@@ -12,7 +12,6 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     AutoConfig,
-    BitsAndBytesConfig,
 )
 
 
@@ -34,12 +33,6 @@ def main(config_path):
         exit(1)
 
     compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=compute_dtype,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-    )
 
     # Read base model name and num_labels from the saved checkpoint metadata
     print("Reading checkpoint metadata...")
@@ -53,13 +46,13 @@ def main(config_path):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Uses Unsloth's pre-quantized weights (fast download, no OOM on T4)
+    # Pre-quantized model: no BitsAndBytesConfig needed
     print(f"Loading base model: {base_model_name}...")
     base_model = AutoModelForSequenceClassification.from_pretrained(
         base_model_name,
         num_labels=num_labels,
-        quantization_config=bnb_config,
         device_map="auto",
+        torch_dtype=compute_dtype,
     )
     base_model.config.pad_token_id = tokenizer.pad_token_id
 

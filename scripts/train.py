@@ -8,7 +8,6 @@ from sklearn.metrics import accuracy_score
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    BitsAndBytesConfig,
     TrainingArguments,
     Trainer,
 )

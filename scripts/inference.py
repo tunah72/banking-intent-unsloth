@@ -7,7 +7,6 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     AutoConfig,
-    BitsAndBytesConfig,
 )
 
 
@@ -30,12 +29,6 @@ class IntentClassification:
         self.id2label = {int(k): v for k, v in mapping.items()}
 
         compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=compute_dtype,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-        )
 
         # Read base model name and num_labels from the saved checkpoint metadata
         print(f"Reading checkpoint metadata from {checkpoint_dir}...")
@@ -44,18 +37,18 @@ class IntentClassification:
         base_model_name = peft_cfg.base_model_name_or_path
         num_labels      = model_cfg.num_labels
 
-        print(f"Loading tokenizer...")
+        print("Loading tokenizer...")
         self.tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Uses Unsloth's pre-quantized weights (fast download, no OOM on T4)
+        # Pre-quantized model: no BitsAndBytesConfig needed
         print(f"Loading base model: {base_model_name}...")
         base_model = AutoModelForSequenceClassification.from_pretrained(
             base_model_name,
             num_labels=num_labels,
-            quantization_config=bnb_config,
             device_map="auto",
+            torch_dtype=compute_dtype,
         )
         base_model.config.pad_token_id = self.tokenizer.pad_token_id
 
