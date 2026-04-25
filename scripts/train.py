@@ -92,8 +92,7 @@ def main(config_path):
     print("Applying LoRA adapters...")
     model = prepare_model_for_kbit_training(
         model,
-        use_gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={"use_reentrant": False},
+        use_gradient_checkpointing=False,  # Trainer manages enable/disable around eval
     )
     lora_config = LoraConfig(
         r=config['lora_r'],
@@ -116,6 +115,7 @@ def main(config_path):
     t_args = config['training_args']
     training_args = TrainingArguments(
         output_dir=t_args['output_dir'],
+        gradient_checkpointing=t_args.get('gradient_checkpointing', True),
         per_device_train_batch_size=t_args['per_device_train_batch_size'],
         gradient_accumulation_steps=t_args['gradient_accumulation_steps'],
         learning_rate=t_args['learning_rate'],
