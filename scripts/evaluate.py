@@ -7,13 +7,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from tqdm import tqdm
-from peft import PeftModel, PeftConfig
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    AutoConfig,
-    BitsAndBytesConfig,
-)
+from peft import PeftConfig, PeftModel
+from transformers import AutoConfig
+from unsloth import FastSequenceClassificationModel
 
 
 def main(config_path):
@@ -33,14 +29,6 @@ def main(config_path):
         print("Please run training first (bash train.sh).\n")
         exit(1)
 
-    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=compute_dtype,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-    )
-
     # Read base model name and num_labels from the saved checkpoint metadata
     print("Reading checkpoint metadata...")
     peft_cfg        = PeftConfig.from_pretrained(checkpoint_dir)
@@ -48,23 +36,24 @@ def main(config_path):
     base_model_name = peft_cfg.base_model_name_or_path
     num_labels      = model_cfg.num_labels
 
-    print("Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
+    print(f"Loading base model with Unsloth: {base_model_name}...")
+    base_model, tokenizer = FastSequenceClassificationModel.from_pretrained(
+        model_name=base_model_name,
+        num_labels=num_labels,
+        max_seq_length=config['max_seq_length'],
+        dtype=None,
+        load_in_4bit=True,
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    print(f"Loading base model: {base_model_name}...")
-    base_model = AutoModelForSequenceClassification.from_pretrained(
-        base_model_name,
-        num_labels=num_labels,
-        quantization_config=bnb_config,
-        device_map="auto",
-    )
     base_model.config.pad_token_id = tokenizer.pad_token_id
 
     print("Applying LoRA adapters...")
     model = PeftModel.from_pretrained(base_model, checkpoint_dir)
     model.eval()
+
+    # Enable Unsloth's native 2x faster inference — avoids OOM during batch prediction
+    FastSequenceClassificationModel.for_inference(model)
 
     print(f"Loading test dataset from {config['test_data_path']}...")
     df_test = pd.read_csv(config['test_data_path'])

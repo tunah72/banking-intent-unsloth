@@ -5,14 +5,8 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset
 from sklearn.metrics import accuracy_score
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    TrainingArguments,
-    Trainer,
-)
-from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+from unsloth import FastSequenceClassificationModel
+from transformers import TrainingArguments, Trainer
 
 
 def compute_metrics(eval_pred):
@@ -47,42 +41,32 @@ def prepare_dataset(csv_path, tokenizer, max_length):
 
 def main(config_path):
     config = load_config(config_path)
-    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
-    # ── Tokenizer ──────────────────────────────────────────────────────────
-    print(f"Loading tokenizer: {config['model_name']}...")
-    tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
+    # ── Model & Tokenizer (Unsloth) ─────────────────────────────────────────
+    print(f"Loading model with Unsloth: {config['model_name']}...")
+    model, tokenizer = FastSequenceClassificationModel.from_pretrained(
+        model_name=config['model_name'],
+        num_labels=config['num_labels'],
+        max_seq_length=config['max_seq_length'],
+        dtype=None,       # auto: float16 on T4, bfloat16 on Ampere+
+        load_in_4bit=True,
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    # ── Model (4-bit QLoRA) ─────────────────────────────────────────────────
-    print(f"Loading model: {config['model_name']}...")
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=compute_dtype,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-    )
-    model = AutoModelForSequenceClassification.from_pretrained(
-        config['model_name'],
-        num_labels=config['num_labels'],
-        quantization_config=bnb_config,
-        device_map="auto",
-    )
     model.config.pad_token_id = tokenizer.pad_token_id
 
-    # ── LoRA ────────────────────────────────────────────────────────────────
+    # ── LoRA (Unsloth) ──────────────────────────────────────────────────────
     print("Applying LoRA adapters...")
-    model = prepare_model_for_kbit_training(model)
-    lora_config = LoraConfig(
+    model = FastSequenceClassificationModel.get_peft_model(
+        model,
         r=config['lora_r'],
-        lora_alpha=config['lora_alpha'],
         target_modules=config['target_modules'],
+        lora_alpha=config['lora_alpha'],
         lora_dropout=config['lora_dropout'],
         bias="none",
-        task_type=TaskType.SEQ_CLS,
+        use_gradient_checkpointing=config.get('use_gradient_checkpointing', 'unsloth'),
+        random_state=config['training_args']['seed'],
     )
-    model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
     # ── Datasets ────────────────────────────────────────────────────────────
@@ -139,8 +123,8 @@ def main(config_path):
 
     print("Training complete! Saving final best model...")
     final_save_dir = os.path.join(output_dir, "final_best_model")
-    model.save_pretrained(final_save_dir)         # LoRA adapters + adapter_config.json
-    model.config.save_pretrained(final_save_dir)  # config.json with num_labels
+    model.save_pretrained(final_save_dir)
+    model.config.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
     print(f"Best model saved to {final_save_dir}")
 
