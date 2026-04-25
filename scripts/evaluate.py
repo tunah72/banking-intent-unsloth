@@ -57,7 +57,7 @@ def main(config_path):
     base_model = AutoModelForSequenceClassification.from_pretrained(
         base_model_name,
         num_labels=num_labels,
-        device_map="auto",
+        device_map={"": 0},
         torch_dtype=compute_dtype,
         quantization_config=quantization_config,
     )
