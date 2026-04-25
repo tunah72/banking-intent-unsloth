@@ -2,11 +2,9 @@
 model_name: "unsloth/Llama-3.1-8B-bnb-4bit"
 max_seq_length: 128
 num_labels: 77
-use_gradient_checkpointing: "unsloth"  # saves ~30% VRAM, fits 2x larger batches
-
 lora_r: 16
 lora_alpha: 32
-lora_dropout: 0  # 0 is optimized per Unsloth docs
+lora_dropout: 0
 target_modules:
   - "q_proj"
   - "k_proj"
