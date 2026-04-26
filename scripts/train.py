@@ -7,6 +7,7 @@ from datasets import Dataset
 from sklearn.metrics import accuracy_score
 from unsloth import FastModel
 from transformers import TrainingArguments, Trainer
+from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
 
 
 def compute_metrics(eval_pred):
@@ -46,13 +47,14 @@ def main(config_path):
     config = load_config(config_path)
 
     # ── Model & Tokenizer via Unsloth FastModel ────────────────────────────
-    # num_labels > 1 → FastModel returns ForSequenceClassification with
-    # Unsloth's Triton kernels active (2x faster, 70% less VRAM vs vanilla HF)
+    # FastModel.from_pretrained patches Unsloth's Triton kernels into the model
+    # (2x faster attention, 70% less VRAM). num_labels > 1 returns
+    # LlamaForSequenceClassification with a fresh float16 score head.
     print(f"Loading model via Unsloth FastModel: {config['model_name']}...")
     model, tokenizer = FastModel.from_pretrained(
         model_name=config['model_name'],
         max_seq_length=config['max_seq_length'],
-        dtype=None,           # auto-detect bfloat16 / float16
+        dtype=None,
         load_in_4bit=True,
         num_labels=config['num_labels'],
     )
@@ -60,22 +62,25 @@ def main(config_path):
         tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.pad_token_id
 
-    # ── LoRA via Unsloth FastModel ─────────────────────────────────────────
-    # use_gradient_checkpointing="unsloth": Unsloth's smart checkpointing —
-    # automatically enables during training and disables during eval,
-    # avoiding the torch.no_grad() + active checkpointing CUDA crash.
-    print("Applying LoRA adapters via Unsloth...")
-    model = FastModel.get_peft_model(
+    # ── LoRA via standard PEFT ─────────────────────────────────────────────
+    # FastModel.get_peft_model only supports causal LM (calls
+    # prepare_inputs_for_generation internally). For ForSequenceClassification
+    # we use standard PEFT — Unsloth's Triton patches remain active regardless.
+    print("Applying LoRA adapters via standard PEFT...")
+    model = prepare_model_for_kbit_training(
         model,
+        use_gradient_checkpointing=False,  # Trainer manages enable/disable around eval
+    )
+    lora_config = LoraConfig(
         r=config['lora_r'],
-        target_modules=config['target_modules'],
         lora_alpha=config['lora_alpha'],
+        target_modules=config['target_modules'],
         lora_dropout=config['lora_dropout'],
         bias="none",
-        use_gradient_checkpointing="unsloth",
-        random_state=config['training_args'].get('seed', 42),
+        task_type=TaskType.SEQ_CLS,
         modules_to_save=config.get('modules_to_save', ["score"]),
     )
+    model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
     # ── Datasets ───────────────────────────────────────────────────────────
@@ -87,6 +92,8 @@ def main(config_path):
     t_args = config['training_args']
     training_args = TrainingArguments(
         output_dir=t_args['output_dir'],
+        gradient_checkpointing=t_args.get('gradient_checkpointing', True),
+        gradient_checkpointing_kwargs={"use_reentrant": False},
         per_device_train_batch_size=t_args['per_device_train_batch_size'],
         gradient_accumulation_steps=t_args['gradient_accumulation_steps'],
         learning_rate=t_args['learning_rate'],
