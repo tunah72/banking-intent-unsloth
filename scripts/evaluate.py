@@ -7,13 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from tqdm import tqdm
-from peft import PeftModel, PeftConfig
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    AutoConfig,
-    BitsAndBytesConfig,
-)
+from unsloth import FastModel
 
 
 def main(config_path):
@@ -33,38 +27,19 @@ def main(config_path):
         print("Please run training first (bash train.sh).\n")
         exit(1)
 
-    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-
-    # Read base model name and num_labels from the saved checkpoint metadata
-    print("Reading checkpoint metadata...")
-    peft_cfg        = PeftConfig.from_pretrained(checkpoint_dir)
-    model_cfg       = AutoConfig.from_pretrained(checkpoint_dir)
-    base_model_name = peft_cfg.base_model_name_or_path
-    num_labels      = model_cfg.num_labels
-
-    print("Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
+    # Load fine-tuned model via Unsloth FastModel.
+    # FastModel resolves the PEFT adapter → loads base model with Unsloth's
+    # Triton kernels → restores LoRA adapters + score head (modules_to_save).
+    print(f"Loading model via Unsloth FastModel from {checkpoint_dir}...")
+    model, tokenizer = FastModel.from_pretrained(
+        model_name=checkpoint_dir,
+        max_seq_length=config['max_seq_length'],
+        dtype=None,
+        load_in_4bit=True,
+        num_labels=len(id2label),
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=compute_dtype,
-        bnb_4bit_use_double_quant=True,
-    )
-    print(f"Loading base model: {base_model_name}...")
-    base_model = AutoModelForSequenceClassification.from_pretrained(
-        base_model_name,
-        num_labels=num_labels,
-        device_map={"": 0},
-        torch_dtype=compute_dtype,
-        quantization_config=quantization_config,
-    )
-    base_model.config.pad_token_id = tokenizer.pad_token_id
-
-    print("Applying LoRA adapters...")
-    model = PeftModel.from_pretrained(base_model, checkpoint_dir)
     model.eval()
 
     print(f"Loading test dataset from {config['test_data_path']}...")
@@ -75,11 +50,12 @@ def main(config_path):
     y_true_names = df_test['label_name'].tolist()
     y_pred_names = []
 
-    # Batch inference for GPU efficiency
+    device = next(model.parameters()).device
+
     print("Running batch inference on test dataset...")
     batch_size = 16
     for i in tqdm(range(0, len(df_test), batch_size)):
-        batch_texts = df_test['text'].iloc[i:i+batch_size].tolist()
+        batch_texts = df_test['text'].iloc[i:i + batch_size].tolist()
         inputs = tokenizer(
             batch_texts,
             return_tensors="pt",
@@ -87,7 +63,7 @@ def main(config_path):
             padding=True,
             max_length=config['max_seq_length'],
         )
-        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        inputs = {k: v.to(device) for k, v in inputs.items()}
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -96,13 +72,13 @@ def main(config_path):
         for class_id in predicted_class_ids:
             y_pred_names.append(id2label[class_id])
 
-    # ── Save prediction CSV ─────────────────────────────────────────────────
+    # ── Save prediction CSV ────────────────────────────────────────────────
     df_test['predicted_label_name'] = y_pred_names
     pred_csv_path = os.path.join(config['output_dir'], "test_predictions.csv")
     df_test.to_csv(pred_csv_path, index=False)
     print(f"\n[1] Saved detailed predictions to: {pred_csv_path}")
 
-    # ── Metrics ─────────────────────────────────────────────────────────────
+    # ── Metrics ────────────────────────────────────────────────────────────
     accuracy     = accuracy_score(y_true_names, y_pred_names)
     target_names = [id2label[i] for i in range(len(id2label))]
     report_dict  = classification_report(
@@ -123,7 +99,7 @@ def main(config_path):
         json.dump(report_dict, f, indent=4)
     print(f"[3] Saved metrics JSON to: {metrics_json_path}")
 
-    # ── Confusion Matrix ─────────────────────────────────────────────────────
+    # ── Confusion Matrix ───────────────────────────────────────────────────
     print("Generating Confusion Matrix...")
     cm = confusion_matrix(y_true_names, y_pred_names, labels=target_names)
     plt.figure(figsize=(24, 20))

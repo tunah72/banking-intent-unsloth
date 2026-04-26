@@ -2,21 +2,15 @@ import os
 import json
 import yaml
 import torch
-from peft import PeftModel, PeftConfig
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    AutoConfig,
-    BitsAndBytesConfig,
-)
+from unsloth import FastModel
 
 
 class IntentClassification:
     def __init__(self, model_path):
         """
-        Initialize the model from a YAML configuration file.
         Args:
-            model_path: Path to the inference configuration file (e.g. configs/inference.yaml).
+            model_path: Path to the inference YAML config (e.g. configs/inference.yaml).
+                        The config contains the actual checkpoint path under 'model_checkpoint'.
         """
         print(f"Loading configuration from {model_path}...")
         with open(model_path, 'r', encoding='utf-8') as f:
@@ -29,48 +23,30 @@ class IntentClassification:
             mapping = json.load(f)
         self.id2label = {int(k): v for k, v in mapping.items()}
 
-        compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-
-        # Read base model name and num_labels from the saved checkpoint metadata
-        print(f"Reading checkpoint metadata from {checkpoint_dir}...")
-        peft_cfg        = PeftConfig.from_pretrained(checkpoint_dir)
-        model_cfg       = AutoConfig.from_pretrained(checkpoint_dir)
-        base_model_name = peft_cfg.base_model_name_or_path
-        num_labels      = model_cfg.num_labels
-
-        print("Loading tokenizer...")
-        self.tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
+        # Load fine-tuned model via Unsloth FastModel.
+        # Passing checkpoint_dir (PEFT adapter path) causes FastModel to:
+        #   1. Read adapter_config.json → resolve base model name
+        #   2. Load base model with Unsloth's Triton kernels
+        #   3. Apply saved LoRA adapters + restore score head (modules_to_save)
+        print(f"Loading model via Unsloth FastModel from {checkpoint_dir}...")
+        self.model, self.tokenizer = FastModel.from_pretrained(
+            model_name=checkpoint_dir,
+            max_seq_length=self.config['max_seq_length'],
+            dtype=None,
+            load_in_4bit=True,
+            num_labels=len(self.id2label),
+        )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=compute_dtype,
-            bnb_4bit_use_double_quant=True,
-        )
-        print(f"Loading base model: {base_model_name}...")
-        base_model = AutoModelForSequenceClassification.from_pretrained(
-            base_model_name,
-            num_labels=num_labels,
-            device_map={"": 0},
-            torch_dtype=compute_dtype,
-            quantization_config=quantization_config,
-        )
-        base_model.config.pad_token_id = self.tokenizer.pad_token_id
-
-        print("Applying LoRA adapters...")
-        self.model = PeftModel.from_pretrained(base_model, checkpoint_dir)
         self.model.eval()
         print("Model ready.")
 
     def __call__(self, message):
         """
-        Predict the intent label for a given input message.
         Args:
-            message: A string containing the customer query.
+            message: Customer query string.
         Returns:
-            predicted_label: The predicted intent label name.
+            Predicted intent label name (string).
         """
         inputs = self.tokenizer(
             message,
@@ -78,7 +54,8 @@ class IntentClassification:
             truncation=True,
             max_length=self.config['max_seq_length'],
         )
-        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+        device = next(self.model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
 
         with torch.no_grad():
             outputs = self.model(**inputs)
