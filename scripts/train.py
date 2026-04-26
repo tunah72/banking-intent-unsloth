@@ -5,14 +5,8 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset
 from sklearn.metrics import accuracy_score
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    TrainingArguments,
-    Trainer,
-    BitsAndBytesConfig,
-)
-from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+from unsloth import FastModel
+from transformers import TrainingArguments, Trainer
 
 
 def compute_metrics(eval_pred):
@@ -42,7 +36,6 @@ def prepare_dataset(csv_path, tokenizer, max_length):
 
     tokenized_dataset = dataset.map(tokenize_function, batched=True)
     tokenized_dataset = tokenized_dataset.rename_column("label", "labels")
-    # Drop all non-model columns so Trainer doesn't pass them to model(**batch)
     keep = [c for c in ["input_ids", "attention_mask", "token_type_ids", "labels"]
             if c in tokenized_dataset.column_names]
     tokenized_dataset = tokenized_dataset.select_columns(keep)
@@ -51,71 +44,49 @@ def prepare_dataset(csv_path, tokenizer, max_length):
 
 def main(config_path):
     config = load_config(config_path)
-    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
-    # ── Tokenizer ──────────────────────────────────────────────────────────
-    print(f"Loading tokenizer: {config['model_name']}...")
-    tokenizer = AutoTokenizer.from_pretrained(config['model_name'])
+    # ── Model & Tokenizer via Unsloth FastModel ────────────────────────────
+    # num_labels > 1 → FastModel returns ForSequenceClassification with
+    # Unsloth's Triton kernels active (2x faster, 70% less VRAM vs vanilla HF)
+    print(f"Loading model via Unsloth FastModel: {config['model_name']}...")
+    model, tokenizer = FastModel.from_pretrained(
+        model_name=config['model_name'],
+        max_seq_length=config['max_seq_length'],
+        dtype=None,           # auto-detect bfloat16 / float16
+        load_in_4bit=True,
+        num_labels=config['num_labels'],
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    # ── Model (4-bit QLoRA) ───────────────────────────────────────────────
-    print(f"Loading model: {config['model_name']}...")
-    
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=compute_dtype,
-        bnb_4bit_use_double_quant=True,
-    )
-    
-    model = AutoModelForSequenceClassification.from_pretrained(
-        config['model_name'],
-        num_labels=config['num_labels'],
-        device_map={"": 0},
-        torch_dtype=compute_dtype,
-        quantization_config=quantization_config,
-    )
     model.config.pad_token_id = tokenizer.pad_token_id
 
-    # ── FIX FOR CLASSIFICATION HEAD QUANTIZATION ────────────────────────────
-    # Prevent bitsandbytes from crashing on the randomly initialized score head
-    import torch.nn as nn
-    if hasattr(model, "score"):
-        in_features = model.score.in_features
-        out_features = model.score.out_features
-        new_score = nn.Linear(in_features, out_features, bias=False)
-        new_score.to(model.device).to(compute_dtype)
-        model.score = new_score
-
-    # ── LoRA ────────────────────────────────────────────────────────────────
-    print("Applying LoRA adapters...")
-    model = prepare_model_for_kbit_training(
+    # ── LoRA via Unsloth FastModel ─────────────────────────────────────────
+    # use_gradient_checkpointing="unsloth": Unsloth's smart checkpointing —
+    # automatically enables during training and disables during eval,
+    # avoiding the torch.no_grad() + active checkpointing CUDA crash.
+    print("Applying LoRA adapters via Unsloth...")
+    model = FastModel.get_peft_model(
         model,
-        use_gradient_checkpointing=False,  # Trainer manages enable/disable around eval
-    )
-    lora_config = LoraConfig(
         r=config['lora_r'],
-        lora_alpha=config['lora_alpha'],
         target_modules=config['target_modules'],
+        lora_alpha=config['lora_alpha'],
         lora_dropout=config['lora_dropout'],
         bias="none",
-        task_type=TaskType.SEQ_CLS,
+        use_gradient_checkpointing="unsloth",
+        random_state=config['training_args'].get('seed', 42),
         modules_to_save=config.get('modules_to_save', ["score"]),
     )
-    model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # ── Datasets ────────────────────────────────────────────────────────────
+    # ── Datasets ───────────────────────────────────────────────────────────
     print("Loading and tokenizing datasets...")
     train_dataset = prepare_dataset("sample_data/train.csv", tokenizer, config['max_seq_length'])
     val_dataset   = prepare_dataset("sample_data/val.csv",   tokenizer, config['max_seq_length'])
 
-    # ── Training Arguments ──────────────────────────────────────────────────
+    # ── Training Arguments ─────────────────────────────────────────────────
     t_args = config['training_args']
     training_args = TrainingArguments(
         output_dir=t_args['output_dir'],
-        gradient_checkpointing=t_args.get('gradient_checkpointing', True),
         per_device_train_batch_size=t_args['per_device_train_batch_size'],
         gradient_accumulation_steps=t_args['gradient_accumulation_steps'],
         learning_rate=t_args['learning_rate'],
@@ -137,7 +108,6 @@ def main(config_path):
         bf16=torch.cuda.is_bf16_supported(),
         seed=t_args['seed'],
         report_to=t_args.get('report_to', 'none'),
-        gradient_checkpointing_kwargs={"use_reentrant": False},
     )
 
     trainer = Trainer(
@@ -161,13 +131,11 @@ def main(config_path):
     print("Starting training...")
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
-    # Log best checkpoint info (load_best_model_at_end=False, so we save the final epoch)
     best_ckpt = trainer.state.best_model_checkpoint
     best_metric = trainer.state.best_metric
     if best_ckpt:
         print(f"\nBest checkpoint during training : {best_ckpt}")
         print(f"Best eval_accuracy              : {best_metric:.4f}")
-        print("(Saving final-epoch weights below; use best checkpoint dir for highest accuracy)")
 
     print("\nSaving final model...")
     final_save_dir = os.path.join(output_dir, "final_best_model")
