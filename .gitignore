@@ -38,3 +38,6 @@ results/test_predictions.csv
 
 # Temporary test files
 test_bnb.py
+
+# Outputs on Kaggle
+outputs/

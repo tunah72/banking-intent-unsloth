@@ -42,6 +42,19 @@ def main(config_path):
         tokenizer.pad_token = tokenizer.eos_token
     model.eval()
 
+    # Align modules_to_save (score head) dtype with backbone compute dtype.
+    # 4-bit quantization keeps activations in float16/bfloat16, but the saved
+    # classification head is restored as float32, causing a matmul dtype mismatch.
+    compute_dtype = next(
+        (p.dtype for p in model.parameters()
+         if p.dtype in (torch.float16, torch.bfloat16)),
+        torch.float16,
+    )
+    for module in model.modules():
+        if hasattr(module, 'modules_to_save'):
+            for saved_module in module.modules_to_save.values():
+                saved_module.to(compute_dtype)
+
     print(f"Loading test dataset from {config['test_data_path']}...")
     df_test = pd.read_csv(config['test_data_path'])
 
