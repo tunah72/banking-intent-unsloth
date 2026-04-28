@@ -4,11 +4,11 @@ Fine-tunes **Llama-3.1 8B** để phân loại ý định khách hàng ngân hà
 
 ## Video Demonstration
 
-> **[INSERT GOOGLE DRIVE VIDEO LINK HERE — CẬP NHẬT SAU KHI QUAY VIDEO]**
+Link demo:
+https://drive.google.com/file/d/1G1LSgbqrZogLUFtkk_9AZBJoNq7PMFT0/view?usp=sharing
 
-*(Video demo: load model checkpoint, chạy inference, in kết quả dự đoán và Final Accuracy trên tập test.)*
-
----
+## Đường dẫn Model trên Hugging Face
+https://huggingface.co/tunah/banking-intent
 
 ## Công nghệ sử dụng
 
@@ -31,7 +31,8 @@ banking-intent-unsloth/
 │   ├── preprocess_data.py   # Tải BANKING77, Stratified Sampling, xuất CSV
 │   ├── train.py             # Fine-tuning với QLoRA (BitsAndBytes + PEFT)
 │   ├── inference.py         # Class IntentClassification (OOP)
-│   └── evaluate.py          # Đánh giá toàn diện trên tập test
+│   ├── evaluate.py          # Đánh giá toàn diện trên tập test
+│   └── upload_to_hf.py      # Upload model checkpoints lên Hugging Face Hub
 ├── configs/
 │   ├── train.yaml           # Hyperparameters: LoRA, Trainer, sampling
 │   ├── inference.yaml       # Cấu hình inference: checkpoint path, seq_length
@@ -44,6 +45,7 @@ banking-intent-unsloth/
 ├── notebooks/
 │   ├── colab_pipeline.ipynb # Pipeline đầy đủ cho Google Colab
 │   └── kaggle_pipeline.ipynb# Pipeline đầy đủ cho Kaggle
+├── results/                 # Thư mục chứa kết quả đánh giá (metrics, biểu đồ)
 ├── train.sh                 # Bash wrapper: python scripts/train.py
 ├── inference.sh             # Bash wrapper: python scripts/inference.py
 ├── evaluate.sh              # Bash wrapper: python scripts/evaluate.py
@@ -128,6 +130,18 @@ Output tại `results/`:
 - `metrics.json` — Metrics JSON
 - `confusion_matrix.png` — Confusion matrix heatmap
 
+### Bước 5 — Upload model lên Hugging Face Hub
+
+Đăng nhập vào Hugging Face qua CLI:
+```bash
+huggingface-cli login
+```
+Chạy script để upload thư mục `checkpoints/final_best_model` lên Hub:
+```bash
+python scripts/upload_to_hf.py
+```
+*(Lưu ý: Mở file `scripts/upload_to_hf.py` và sửa `repo_id = "your_username/banking-intent"` cho phù hợp với tài khoản của bạn trước khi chạy).*
+
 ---
 
 ## Sử dụng class IntentClassification
@@ -150,7 +164,5 @@ print(result)  # → "balance_not_updated_after_bank_transfer"
 
 ## Kết quả
 
-*(Cập nhật sau khi training hoàn tất trên Colab/Kaggle)*
-
-- **Test Accuracy:** `[Value]%`
-- **Macro F1-Score:** `[Value]`
+- **Test Accuracy:** `91.04%`
+- **Macro F1-Score:** `90.95%`
