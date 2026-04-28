@@ -10,6 +10,9 @@ https://drive.google.com/file/d/1G1LSgbqrZogLUFtkk_9AZBJoNq7PMFT0/view?usp=shari
 ## Đường dẫn Model trên Hugging Face
 https://huggingface.co/tunah/banking-intent
 
+## Kết quả Fine-tune (Gồm sample_data, checkpoints, results)
+https://drive.google.com/drive/folders/1N74gttIResyRa9b4yiVsiY7RP8oLE4nl?usp=sharing
+
 ## Công nghệ sử dụng
 
 | Thành phần | Chi tiết |
