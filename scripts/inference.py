@@ -39,6 +39,20 @@ class IntentClassification:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model.eval()
+
+        # Align modules_to_save (score head) dtype with backbone compute dtype.
+        # 4-bit quantization keeps activations in float16/bfloat16, but the saved
+        # classification head is restored as float32, causing a matmul dtype mismatch.
+        compute_dtype = next(
+            (p.dtype for p in self.model.parameters()
+             if p.dtype in (torch.float16, torch.bfloat16)),
+            torch.float16,
+        )
+        for module in self.model.modules():
+            if hasattr(module, 'modules_to_save'):
+                for saved_module in module.modules_to_save.values():
+                    saved_module.to(compute_dtype)
+
         print("Model ready.")
 
     def __call__(self, message):
