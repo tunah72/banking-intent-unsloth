@@ -51,7 +51,7 @@ def main(config_path):
         torch.float16,
     )
     for module in model.modules():
-        if hasattr(module, 'modules_to_save'):
+        if hasattr(module, 'modules_to_save') and hasattr(module.modules_to_save, 'values'):
             for saved_module in module.modules_to_save.values():
                 saved_module.to(compute_dtype)
 
